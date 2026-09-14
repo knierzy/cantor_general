@@ -8,6 +8,10 @@ import plotly.graph_objects as go
 from plotly.colors import sample_colorscale
 import streamlit as st
 
+
+# ------------------------------------------------------------
+# Find Chromium / Chrome for Kaleido PNG export
+# ------------------------------------------------------------
 chromium_path = (
     shutil.which("chromium")
     or shutil.which("chromium-browser")
@@ -18,15 +22,19 @@ chromium_path = (
 if chromium_path:
     os.environ["BROWSER_PATH"] = chromium_path
 
+
 st.set_page_config(layout="wide", page_title="Cantor Grids")
 
 st.title("Cantor Grids – Four-Parameter Compositional Visualization")
 st.caption("Build: V36 — Aitchison / Log-Euclidean subgroup distance choice")
+
+# TEMPORARY diagnostic line
+st.write("Chromium path:", chromium_path)
+
 st.caption(
     "Define four compositional parameters, create subgroup fields from parameter ranges, "
     "and optionally add sample points manually or from Excel."
 )
-
 # ============================================================
 # Core Cantor-grid geometry
 # ============================================================
