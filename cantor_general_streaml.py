@@ -1,9 +1,22 @@
 import itertools
+import os
+import shutil
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.colors import sample_colorscale
 import streamlit as st
+
+chromium_path = (
+    shutil.which("chromium")
+    or shutil.which("chromium-browser")
+    or shutil.which("google-chrome")
+    or shutil.which("google-chrome-stable")
+)
+
+if chromium_path:
+    os.environ["BROWSER_PATH"] = chromium_path
 
 st.set_page_config(layout="wide", page_title="Cantor Grids")
 
