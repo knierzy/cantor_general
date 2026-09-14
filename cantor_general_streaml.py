@@ -1,5 +1,4 @@
 import itertools
-import re
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -9,9 +8,9 @@ import streamlit as st
 st.set_page_config(layout="wide", page_title="Cantor Grids")
 
 st.title("Cantor Grids – Four-Parameter Compositional Visualization")
-st.caption("Build: V38 — optimized rule rendering + vectorized rule evaluation")
+st.caption("Build: V36 — Aitchison / Log-Euclidean subgroup distance choice")
 st.caption(
-    "Define four compositional parameters, create subgroup fields from ranges or logical rules, "
+    "Define four compositional parameters, create subgroup fields from parameter ranges, "
     "and optionally add sample points manually or from Excel."
 )
 
@@ -179,261 +178,6 @@ def build_subgroup_points(ranges):
     return pd.DataFrame(rows, columns=["A", "B", "C", "D", "AB", "x", "y"])
 
 
-# ============================================================
-# Rule-based subgroup definitions
-# ============================================================
-
-_RULE_RE = re.compile(
-    r"^\s*(A|B|C|D|Anorm|Bnorm|Cnorm|Dnorm)\s*"
-    r"(<=|>=|==|=|<|>)\s*"
-    r"(A|B|C|D|Anorm|Bnorm|Cnorm|Dnorm|[-+]?\d+(?:\.\d+)?)\s*$",
-    re.IGNORECASE,
-)
-
-
-def parse_normalize_spec(spec):
-    """
-    Parse a normalization definition such as 'A+B+D'.
-
-    Returns a tuple containing the selected base variables, e.g. ('A','B','D').
-    Blank / NaN means that no normalized variables are available.
-    """
-    if spec is None or (isinstance(spec, float) and np.isnan(spec)):
-        return tuple()
-
-    cleaned = str(spec).upper().replace(" ", "")
-    if cleaned in {"", "NAN", "NONE", "-"}:
-        return tuple()
-
-    parts = cleaned.split("+")
-    if not parts or any(p not in {"A", "B", "C", "D"} for p in parts):
-        raise ValueError(
-            f"Invalid Normalize specification '{spec}'. Use for example A+B+D."
-        )
-    if len(set(parts)) != len(parts):
-        raise ValueError(f"Normalize specification '{spec}' contains duplicates.")
-    if len(parts) < 2:
-        raise ValueError("Normalize must contain at least two components, e.g. A+B+D.")
-    return tuple(parts)
-
-
-def _rule_context(a, b, c, d, normalize_spec=""):
-    """Build raw and optional normalized variables for rule evaluation."""
-    raw = {"A": float(a), "B": float(b), "C": float(c), "D": float(d)}
-    context = dict(raw)
-
-    norm_vars = parse_normalize_spec(normalize_spec)
-    if norm_vars:
-        denom = sum(raw[v] for v in norm_vars)
-        if denom > 0:
-            for v in norm_vars:
-                context[f"{v}norm"] = raw[v] / denom * 100.0
-        else:
-            for v in norm_vars:
-                context[f"{v}norm"] = np.nan
-
-    return context
-
-
-def _canonical_rule_var(token):
-    token = str(token).strip()
-    if token.lower().endswith("norm"):
-        return token[0].upper() + "norm"
-    return token.upper()
-
-
-def evaluate_subgroup_rule(a, b, c, d, rule, normalize_spec=""):
-    """
-    Evaluate a semicolon-separated AND rule.
-
-    Supported variables:
-      A, B, C, D                 raw percentages
-      Anorm, Bnorm, Cnorm, Dnorm normalized percentages according to Normalize
-
-    Supported comparisons:
-      <, <=, >, >=, =, ==
-
-    The right-hand side may be a number or another variable, e.g.:
-      C<15; Anorm>=75; Anorm<95; Bnorm>=Dnorm
-    """
-    if rule is None or (isinstance(rule, float) and np.isnan(rule)):
-        return False
-
-    rule_text = str(rule).strip()
-    if not rule_text or rule_text.lower() == "nan":
-        return False
-
-    context = _rule_context(a, b, c, d, normalize_spec)
-    conditions = [part.strip() for part in rule_text.split(";") if part.strip()]
-    if not conditions:
-        return False
-
-    for condition in conditions:
-        match = _RULE_RE.match(condition)
-        if not match:
-            raise ValueError(
-                f"Unsupported rule condition '{condition}'. "
-                "Use expressions such as C<15, Anorm>=95 or Bnorm>Dnorm, "
-                "joined with semicolons."
-            )
-
-        left_token, operator, right_token = match.groups()
-        left_name = _canonical_rule_var(left_token)
-
-        if left_name not in context:
-            raise ValueError(
-                f"Variable '{left_token}' is not available. "
-                f"Check the Normalize column (currently '{normalize_spec}')."
-            )
-        left = context[left_name]
-
-        right_name = _canonical_rule_var(right_token)
-        if right_name in {"A", "B", "C", "D", "Anorm", "Bnorm", "Cnorm", "Dnorm"}:
-            if right_name not in context:
-                raise ValueError(
-                    f"Variable '{right_token}' is not available. "
-                    f"Check the Normalize column (currently '{normalize_spec}')."
-                )
-            right = context[right_name]
-        else:
-            right = float(right_token)
-
-        if not np.isfinite(left) or not np.isfinite(right):
-            return False
-
-        if operator == "<" and not (left < right):
-            return False
-        if operator == "<=" and not (left <= right):
-            return False
-        if operator == ">" and not (left > right):
-            return False
-        if operator == ">=" and not (left >= right):
-            return False
-        if operator in {"=", "=="} and not np.isclose(left, right, atol=1e-9):
-            return False
-
-    return True
-
-
-def validate_subgroup_rule(rule, normalize_spec=""):
-    """Validate syntax and normalized-variable availability without needing a real sample."""
-    # A non-degenerate test composition makes all common normalization denominators positive.
-    evaluate_subgroup_rule(25, 25, 25, 25, rule, normalize_spec)
-    return True
-
-
-@st.cache_data(show_spinner=False)
-def build_all_integer_compositions():
-    """
-    Build the complete drawable integer Cantor composition space once.
-
-    Domain: 1 <= A+B <= 99 and A+B+C+D = 100.
-    """
-    rows = []
-    for ab in range(1, 100):
-        row = int(99 - ab)
-        row_start, _, _ = RECTANGLES[row]
-        for b in range(0, ab + 1):
-            a = ab - b
-            x = float(row_start + b + 0.5)
-            for c in range(0, 101 - ab):
-                d = 100 - ab - c
-                rows.append((a, b, c, d, ab, x, float(c)))
-
-    return pd.DataFrame(
-        rows,
-        columns=["A", "B", "C", "D", "AB", "x", "y"]
-    )
-
-
-def _parse_rule_conditions(rule):
-    """Parse a semicolon-separated rule once."""
-    if rule is None or (isinstance(rule, float) and np.isnan(rule)):
-        return []
-
-    rule_text = str(rule).strip()
-    if not rule_text or rule_text.lower() == "nan":
-        return []
-
-    parsed = []
-    for condition in [p.strip() for p in rule_text.split(";") if p.strip()]:
-        match = _RULE_RE.match(condition)
-        if not match:
-            raise ValueError(
-                f"Unsupported rule condition '{condition}'. "
-                "Use expressions such as C<15, Anorm>=95 or Bnorm>Dnorm, "
-                "joined with semicolons."
-            )
-        left_token, operator, right_token = match.groups()
-        parsed.append((
-            _canonical_rule_var(left_token),
-            operator,
-            _canonical_rule_var(right_token)
-        ))
-    return parsed
-
-
-def build_subgroup_points_from_rule(rule, normalize_spec=""):
-    """
-    Vectorized rule evaluation over the complete integer Cantor composition space.
-
-    This is much lighter on Streamlit Cloud than evaluating every rule inside
-    three nested Python loops.
-    """
-    validate_subgroup_rule(rule, normalize_spec)
-
-    work = build_all_integer_compositions()
-    context = {
-        "A": work["A"].astype(float),
-        "B": work["B"].astype(float),
-        "C": work["C"].astype(float),
-        "D": work["D"].astype(float),
-    }
-
-    norm_vars = parse_normalize_spec(normalize_spec)
-    if norm_vars:
-        denom = sum(context[v] for v in norm_vars)
-        safe_denom = denom.where(denom > 0, np.nan)
-        for v in norm_vars:
-            context[f"{v}norm"] = context[v] / safe_denom * 100.0
-
-    mask = pd.Series(True, index=work.index)
-
-    for left_name, operator, right_token in _parse_rule_conditions(rule):
-        if left_name not in context:
-            raise ValueError(
-                f"Variable '{left_name}' is not available. "
-                f"Check the Normalize column (currently '{normalize_spec}')."
-            )
-
-        left = context[left_name]
-
-        if right_token in {"A", "B", "C", "D", "Anorm", "Bnorm", "Cnorm", "Dnorm"}:
-            if right_token not in context:
-                raise ValueError(
-                    f"Variable '{right_token}' is not available. "
-                    f"Check the Normalize column (currently '{normalize_spec}')."
-                )
-            right = context[right_token]
-        else:
-            right = float(right_token)
-
-        if operator == "<":
-            cond = left < right
-        elif operator == "<=":
-            cond = left <= right
-        elif operator == ">":
-            cond = left > right
-        elif operator == ">=":
-            cond = left >= right
-        else:
-            cond = np.isclose(left, right, atol=1e-9)
-
-        mask &= pd.Series(cond, index=work.index).fillna(False)
-
-    return work.loc[mask].copy()
-
-
 def convex_hull_2d(points):
     """
     Monotonic-chain convex hull; avoids an additional scipy dependency.
@@ -495,83 +239,6 @@ def rgba_with_alpha(color, alpha):
     raise ValueError(f"Unsupported color format: {color}")
 
 
-def _discrete_colorscale(colors):
-    """Colorscale whose integer category centres map exactly to subgroup colors."""
-    n = len(colors)
-    if n == 0:
-        return [[0.0, "#808080"], [1.0, "#808080"]]
-    if n == 1:
-        return [[0.0, colors[0]], [1.0, colors[0]]]
-
-    scale = [[0.0, colors[0]]]
-    for i, color in enumerate(colors):
-        scale.append([(i + 0.5) / n, color])
-    scale.append([1.0, colors[-1]])
-    return scale
-
-
-def add_rule_partition_heatmaps(fig, subgroup_results, color_map=None, opacity=0.38):
-    """
-    Draw all rule-defined subgroups with only ONE heatmap per AB slice.
-
-    Maximum trace count for a complete rule classification is therefore 99,
-    instead of up to 99 x number_of_subgroups.
-    """
-    valid = [sg for sg in subgroup_results if not sg["points"].empty]
-    if not valid:
-        return
-
-    names = [sg["name"] for sg in valid]
-    colors = [
-        (color_map or {}).get(name, SUBGROUP_COLORS[i % len(SUBGROUP_COLORS)])
-        for i, name in enumerate(names)
-    ]
-    name_to_code = {name: i for i, name in enumerate(names)}
-    colorscale = _discrete_colorscale(colors)
-    n_codes = len(names)
-
-    by_ab = {
-        ab: np.full((101 - ab, ab + 1), np.nan, dtype=float)
-        for ab in range(1, 100)
-    }
-
-    for sg in valid:
-        code = float(name_to_code[sg["name"]])
-        for rec in sg["points"][["AB", "B", "C"]].itertuples(index=False):
-            ab = int(rec.AB)
-            b = int(rec.B)
-            c = int(rec.C)
-
-            # In case of overlapping rules, the first subgroup is drawn.
-            # Overlap statistics are still calculated from the exact point sets.
-            if np.isnan(by_ab[ab][c, b]):
-                by_ab[ab][c, b] = code
-
-    for ab in range(1, 100):
-        z = by_ab[ab]
-        if np.isnan(z).all():
-            continue
-
-        row = int(99 - ab)
-        row_start, _, _ = RECTANGLES[row]
-
-        fig.add_trace(
-            go.Heatmap(
-                x=row_start + np.arange(ab + 1, dtype=float) + 0.5,
-                y=np.arange(0, 101 - ab, dtype=float),
-                z=z,
-                zmin=-0.5,
-                zmax=max(n_codes - 0.5, 0.5),
-                colorscale=colorscale,
-                showscale=False,
-                opacity=opacity,
-                zsmooth=False,
-                hoverinfo="skip",
-                showlegend=False,
-            )
-        )
-
-
 def add_subgroup_fields(fig, subgroup_results, hull_width=1.0, subfield_width=1.0, color_map=None):
     """
     Draw subgroup fields as translucent colored rectangles with matching colored outlines.
@@ -580,18 +247,12 @@ def add_subgroup_fields(fig, subgroup_results, hull_width=1.0, subfield_width=1.
     define a rectangular subfield in the final Cantor-grid coordinates.
     No colored subgroup points are plotted.
     """
-    nonempty = [sg for sg in subgroup_results if not sg["points"].empty]
-    if nonempty and all(sg.get("definition_type", "range") == "rule" for sg in nonempty):
-        add_rule_partition_heatmaps(fig, nonempty, color_map=color_map)
-        return
-
     for idx, sg in enumerate(subgroup_results):
         pts = sg["points"]
         if pts.empty:
             continue
 
         color = (color_map or {}).get(sg["name"], SUBGROUP_COLORS[idx % len(SUBGROUP_COLORS)])
-
 
         # Subgroup rectangles use the exact color assigned by the active
         # color scale. The fill is translucent so the Cantor grid remains
@@ -739,42 +400,6 @@ def calculate_subgroup_field_overlaps(subgroup_results):
     """
     valid = [sg for sg in subgroup_results if not sg["points"].empty]
 
-    # For rule-defined classifications, use exact occupied composition cells.
-    # This avoids false overlap caused by rectangular bounding boxes.
-    if valid and all(sg.get("definition_type", "range") == "rule" for sg in valid):
-        point_sets = {
-            sg["name"]: set(
-                map(tuple, sg["points"][["A", "B", "C", "D"]].astype(int).to_numpy())
-            )
-            for sg in valid
-        }
-        overlaps = []
-        max_order = min(3, len(valid))
-        for order in range(2, max_order + 1):
-            for combo in itertools.combinations(valid, order):
-                names = [sg["name"] for sg in combo]
-                intersection = set.intersection(*(point_sets[name] for name in names))
-                if not intersection:
-                    continue
-                shared = float(len(intersection))
-                percentages = {
-                    name: shared / len(point_sets[name]) * 100.0
-                    if point_sets[name] else 0.0
-                    for name in names
-                }
-                overlaps.append({
-                    "Names": names,
-                    "Order": order,
-                    "Intersection_area": shared,
-                    "Percentages": percentages,
-                    "Max_percent": max(percentages.values()),
-                })
-        return sorted(
-            overlaps,
-            key=lambda row: (row["Order"], row["Max_percent"]),
-            reverse=True
-        )
-
     rect_maps = {
         sg["name"]: subgroup_rectangles_by_ab(sg)
         for sg in valid
@@ -872,12 +497,6 @@ def add_overlap_hatching(
         sg for sg in subgroup_results
         if not sg["points"].empty
     ]
-
-    # Rule-based fields are rendered from exact cells. The classic rectangle-based
-    # hatching would create false positives, so do not use it for an all-rule file.
-    # Exact overlap percentages are still calculated by calculate_subgroup_field_overlaps().
-    if valid and all(sg.get("definition_type", "range") == "rule" for sg in valid):
-        return
 
     rect_maps = {
         sg["name"]: subgroup_rectangles_by_ab(sg)
@@ -1454,23 +1073,13 @@ def read_uploaded_dataset(uploaded_file, labels):
     return data
 
 
-def classify_by_definitions(row, subgroup_defs):
-    """Return all explicitly defined subgroup fields containing a sample."""
+def classify_by_ranges(row, subgroup_defs):
     hits = []
-    vals = [float(row["A"]), float(row["B"]), float(row["C"]), float(row["D"])]
+    vals = [row["A"], row["B"], row["C"], row["D"]]
 
     for sg in subgroup_defs:
-        if sg.get("definition_type", "range") == "rule":
-            if evaluate_subgroup_rule(
-                vals[0], vals[1], vals[2], vals[3],
-                sg.get("rule", ""),
-                sg.get("normalize", "")
-            ):
-                hits.append(sg["name"])
-        else:
-            ranges = sg["ranges"]
-            if all(ranges[i][0] <= vals[i] <= ranges[i][1] for i in range(4)):
-                hits.append(sg["name"])
+        if all(sg["ranges"][i][0] <= vals[i] <= sg["ranges"][i][1] for i in range(4)):
+            hits.append(sg["name"])
 
     return ", ".join(hits) if hits else "Unclassified"
 
@@ -1581,38 +1190,26 @@ if definition_mode == "Manual input":
 
             subgroup_defs.append({
                 "name": name.strip() or f"Subgroup {i+1}",
-                "definition_type": "range",
                 "ranges": ranges
             })
 
 else:
     st.markdown("""
-Upload an Excel file containing one subgroup per row. Two definition styles are supported.
+Upload an Excel file containing one subgroup per row.
 
-**A) Min/max ranges (existing format)**
+**Required columns:**
 
 `Subgroup | A_min | A_max | B_min | B_max | C_min | C_max | D_min | D_max`
 
-**B) Logical rules (new format)**
+Example:
 
-`Subgroup | Normalize | Rule`
+| Subgroup | A_min | A_max | B_min | B_max | C_min | C_max | D_min | D_max |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Subgroup 1 | 55 | 75 | 10 | 30 | 5 | 20 | 2 | 10 |
+| Subgroup 2 | 30 | 50 | 25 | 45 | 15 | 30 | 3 | 10 |
+| Subgroup 3 | 15 | 35 | 20 | 40 | 35 | 55 | 3 | 10 |
 
-`Normalize` defines which components are re-normalized to 100%, for example `A+B+D`.
-The rule can then use `Anorm`, `Bnorm`, `Cnorm`, `Dnorm` for those normalized components.
-Raw variables `A`, `B`, `C`, `D` are always available.
-
-Examples:
-
-| Subgroup | Normalize | Rule |
-|---|---|---|
-| Quartz arenite | A+B+D | `C<15; Anorm>=95` |
-| Subarkose | A+B+D | `C<15; Anorm>=75; Anorm<95; Bnorm>=Dnorm` |
-| Mudrock |  | `C>=75` |
-
-Supported operators: `<`, `<=`, `>`, `>=`, `=`, `==`.  
-Separate multiple conditions with semicolons; all conditions in one row are combined with **AND**.
-
-The letters A–D refer to the parameter names defined above. Range rows and rule rows may also be mixed in one workbook.
+The letters A–D refer to the parameter names defined above.
 """)
 
     subgroup_file = st.file_uploader(
@@ -1625,137 +1222,98 @@ The letters A–D refer to the parameter names defined above. Range rows and rul
         try:
             sg_df = pd.read_excel(subgroup_file)
 
-            # Clean Excel column names and map common names case-insensitively.
+            # Clean Excel column names (spaces / non-breaking spaces / capitalization)
             sg_df.columns = (
-                sg_df.columns.astype(str)
+                sg_df.columns
+                .astype(str)
                 .str.replace("\u00a0", " ", regex=False)
                 .str.strip()
             )
 
-            canonical_columns = {
-                "subgroup": "Subgroup",
-                "normalize": "Normalize",
-                "normalise": "Normalize",
-                "rule": "Rule",
-                "a_min": "A_min", "a_max": "A_max",
-                "b_min": "B_min", "b_max": "B_max",
-                "c_min": "C_min", "c_max": "C_max",
-                "d_min": "D_min", "d_max": "D_max",
-            }
-            rename_map = {}
-            for col in sg_df.columns:
-                key = col.strip().lower()
-                if key in canonical_columns:
-                    rename_map[col] = canonical_columns[key]
-            sg_df = sg_df.rename(columns=rename_map)
+            # Accept subgroup header case-insensitively
+            sg_df = sg_df.rename(columns={
+                c: "Subgroup"
+                for c in sg_df.columns
+                if c.strip().lower() == "subgroup"
+            })
 
-            if "Subgroup" not in sg_df.columns:
-                st.error("Missing required column: Subgroup")
+            required_cols = [
+                "Subgroup",
+                "A_min", "A_max",
+                "B_min", "B_max",
+                "C_min", "C_max",
+                "D_min", "D_max"
+            ]
+
+            missing_cols = [c for c in required_cols if c not in sg_df.columns]
+
+            if missing_cols:
+                st.error("Missing required columns: " + ", ".join(missing_cols))
             else:
-                range_cols = [
-                    "A_min", "A_max", "B_min", "B_max",
-                    "C_min", "C_max", "D_min", "D_max"
-                ]
-                has_rule_column = "Rule" in sg_df.columns
-                has_all_range_columns = all(c in sg_df.columns for c in range_cols)
+                sg_df = sg_df[required_cols].copy()
+                numeric_cols = required_cols[1:]
 
-                if not has_rule_column and not has_all_range_columns:
-                    st.error(
-                        "The file must contain either the eight min/max columns "
-                        "or a Rule column (optionally with Normalize)."
-                    )
+                for col in numeric_cols:
+                    sg_df[col] = pd.to_numeric(sg_df[col], errors="coerce")
+
+                if sg_df[numeric_cols].isna().any().any():
+                    st.error("At least one range value is missing or not numeric.")
                 else:
-                    invalid_messages = []
+                    invalid_rows = []
 
                     for idx, row in sg_df.iterrows():
-                        name = str(row.get("Subgroup", "")).strip()
+                        name = str(row["Subgroup"]).strip()
                         if not name or name.lower() == "nan":
                             name = f"Subgroup {idx + 1}"
 
-                        rule_value = row.get("Rule", np.nan)
-                        has_rule = not pd.isna(rule_value) and str(rule_value).strip() != ""
-
-                        if has_rule:
-                            normalize_value = row.get("Normalize", "")
-                            if pd.isna(normalize_value):
-                                normalize_value = ""
-                            normalize_value = str(normalize_value).strip()
-                            rule_text = str(rule_value).strip()
-
-                            try:
-                                validate_subgroup_rule(rule_text, normalize_value)
-                                subgroup_defs.append({
-                                    "name": name,
-                                    "definition_type": "rule",
-                                    "normalize": normalize_value,
-                                    "rule": rule_text,
-                                })
-                            except Exception as exc:
-                                invalid_messages.append(
-                                    f"Row {idx + 2} ({name}): {exc}"
-                                )
-                            continue
-
-                        # No rule in this row -> fall back to the classic range definition.
-                        if not has_all_range_columns:
-                            invalid_messages.append(
-                                f"Row {idx + 2} ({name}): no Rule and min/max columns are incomplete."
-                            )
-                            continue
-
-                        numeric_values = {}
-                        numeric_error = False
-                        for col in range_cols:
-                            val = pd.to_numeric(row.get(col), errors="coerce")
-                            if pd.isna(val):
-                                numeric_error = True
-                                break
-                            numeric_values[col] = int(val)
-
-                        if numeric_error:
-                            invalid_messages.append(
-                                f"Row {idx + 2} ({name}): at least one range value is missing or not numeric."
-                            )
-                            continue
-
                         ranges = [
-                            (numeric_values["A_min"], numeric_values["A_max"]),
-                            (numeric_values["B_min"], numeric_values["B_max"]),
-                            (numeric_values["C_min"], numeric_values["C_max"]),
-                            (numeric_values["D_min"], numeric_values["D_max"]),
+                            (int(row["A_min"]), int(row["A_max"])),
+                            (int(row["B_min"]), int(row["B_max"])),
+                            (int(row["C_min"]), int(row["C_max"])),
+                            (int(row["D_min"]), int(row["D_max"]))
                         ]
 
                         range_error = any(
-                            lo < 0 or hi > 100 or lo > hi for lo, hi in ranges
+                            lo < 0 or hi > 100 or lo > hi
+                            for lo, hi in ranges
                         )
                         sum_min = sum(r[0] for r in ranges)
                         sum_max = sum(r[1] for r in ranges)
                         closure_error = sum_min > 100 or sum_max < 100
 
-                        if range_error:
-                            invalid_messages.append(
-                                f"Row {idx + 2} ({name}): ranges must satisfy 0 <= min <= max <= 100."
+                        if range_error or closure_error:
+                            invalid_rows.append(
+                                (idx + 2, name, sum_min, sum_max, range_error)
                             )
-                            continue
-                        if closure_error:
-                            invalid_messages.append(
-                                f"Row {idx + 2} ({name}): no 100% composition is possible "
-                                f"(sum minima={sum_min}%, sum maxima={sum_max}%)."
-                            )
-                            continue
 
                         subgroup_defs.append({
                             "name": name,
-                            "definition_type": "range",
-                            "ranges": ranges,
+                            "ranges": ranges
                         })
 
-                    if subgroup_defs:
-                        st.success(f"{len(subgroup_defs)} subgroup(s) loaded.")
-                        st.dataframe(sg_df, use_container_width=False)
+                    preview = sg_df.copy()
+                    preview.columns = [
+                        "Subgroup",
+                        f"{labels[0]} min", f"{labels[0]} max",
+                        f"{labels[1]} min", f"{labels[1]} max",
+                        f"{labels[2]} min", f"{labels[2]} max",
+                        f"{labels[3]} min", f"{labels[3]} max"
+                    ]
 
-                    for message in invalid_messages:
-                        st.error(message)
+                    st.success(f"{len(subgroup_defs)} subgroup(s) loaded.")
+                    st.dataframe(preview, use_container_width=False)
+
+                    for row_no, name, sum_min, sum_max, range_error in invalid_rows:
+                        if range_error:
+                            st.error(
+                                f"Row {row_no} ({name}): range values must satisfy "
+                                "0 ≤ minimum ≤ maximum ≤ 100."
+                            )
+                        if sum_min > 100 or sum_max < 100:
+                            st.error(
+                                f"Row {row_no} ({name}): no 100% composition is possible "
+                                f"(sum minima = {sum_min}%, sum maxima = {sum_max}%)."
+                            )
 
         except Exception as exc:
             st.error(f"Could not read subgroup definition file: {exc}")
@@ -1766,34 +1324,18 @@ The letters A–D refer to the parameter names defined above. Range rows and rul
 
 st.header("3. Generate subgroup fields")
 
-# Always regenerate from the currently visible/manual or uploaded subgroup definitions.
+# Always regenerate from the currently visible/manual or uploaded range definitions.
 # This avoids stale Streamlit session-state data after switching input mode or
 # updating the app code.
 generated_subgroups = []
 
 for sg in subgroup_defs:
-    definition_type = sg.get("definition_type", "range")
-
-    if definition_type == "rule":
-        points = build_subgroup_points_from_rule(
-            sg.get("rule", ""),
-            sg.get("normalize", "")
-        )
-        generated_subgroups.append({
-            "name": sg["name"],
-            "definition_type": "rule",
-            "normalize": sg.get("normalize", ""),
-            "rule": sg.get("rule", ""),
-            "points": points
-        })
-    else:
-        points = build_subgroup_points(sg["ranges"])
-        generated_subgroups.append({
-            "name": sg["name"],
-            "definition_type": "range",
-            "ranges": sg["ranges"],
-            "points": points
-        })
+    points = build_subgroup_points(sg["ranges"])
+    generated_subgroups.append({
+        "name": sg["name"],
+        "ranges": sg["ranges"],
+        "points": points
+    })
 
 if generated_subgroups:
     summary = pd.DataFrame([
@@ -2083,8 +1625,8 @@ if has_samples:
         else "ln(x + 1) transformed Euclidean geometry"
     )
 
-    df["Inside_Defined_Field"] = df.apply(
-        lambda r: classify_by_definitions(r, subgroup_defs),
+    df["Inside_Range_Field"] = df.apply(
+        lambda r: classify_by_ranges(r, subgroup_defs),
         axis=1
     )
 
@@ -2612,14 +2154,14 @@ if has_samples:
             f"{labels[3]}: {d:.0f}%<br>"
             f"Nearest subgroup: {sg}<br>"
             f"{classification_distance_title}: {dist:.3f}<br>"
-            f"Inside explicitly defined field: {inside}"
+            f"Inside defined range field: {inside}"
         )
         for loc, a, b, c, d, sg, dist, inside in zip(
             df["Locality"],
             df["A"], df["B"], df["C"], df["D"],
             df["Subgroup"],
             df[classification_distance_column],
-            df["Inside_Defined_Field"]
+            df["Inside_Range_Field"]
         )
     ]
 
@@ -2967,7 +2509,7 @@ if has_samples:
     display_df = df[
         [
             "Locality", "A", "B", "C", "D",
-            "Subgroup", classification_distance_column, "Inside_Defined_Field"
+            "Subgroup", classification_distance_column, "Inside_Range_Field"
         ]
     ].rename(
         columns={
