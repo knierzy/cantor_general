@@ -9,7 +9,7 @@ import streamlit as st
 st.set_page_config(layout="wide", page_title="Cantor Grids")
 
 st.title("Cantor Grids – Four-Parameter Compositional Visualization")
-st.caption("Build: V37 — range + logical-rule subgroup definitions")
+st.caption("Build: V38 — optimized rule rendering + vectorized rule evaluation")
 st.caption(
     "Define four compositional parameters, create subgroup fields from ranges or logical rules, "
     "and optionally add sample points manually or from Excel."
@@ -322,29 +322,116 @@ def validate_subgroup_rule(rule, normalize_spec=""):
     return True
 
 
+@st.cache_data(show_spinner=False)
+def build_all_integer_compositions():
+    """
+    Build the complete drawable integer Cantor composition space once.
+
+    Domain: 1 <= A+B <= 99 and A+B+C+D = 100.
+    """
+    rows = []
+    for ab in range(1, 100):
+        row = int(99 - ab)
+        row_start, _, _ = RECTANGLES[row]
+        for b in range(0, ab + 1):
+            a = ab - b
+            x = float(row_start + b + 0.5)
+            for c in range(0, 101 - ab):
+                d = 100 - ab - c
+                rows.append((a, b, c, d, ab, x, float(c)))
+
+    return pd.DataFrame(
+        rows,
+        columns=["A", "B", "C", "D", "AB", "x", "y"]
+    )
+
+
+def _parse_rule_conditions(rule):
+    """Parse a semicolon-separated rule once."""
+    if rule is None or (isinstance(rule, float) and np.isnan(rule)):
+        return []
+
+    rule_text = str(rule).strip()
+    if not rule_text or rule_text.lower() == "nan":
+        return []
+
+    parsed = []
+    for condition in [p.strip() for p in rule_text.split(";") if p.strip()]:
+        match = _RULE_RE.match(condition)
+        if not match:
+            raise ValueError(
+                f"Unsupported rule condition '{condition}'. "
+                "Use expressions such as C<15, Anorm>=95 or Bnorm>Dnorm, "
+                "joined with semicolons."
+            )
+        left_token, operator, right_token = match.groups()
+        parsed.append((
+            _canonical_rule_var(left_token),
+            operator,
+            _canonical_rule_var(right_token)
+        ))
+    return parsed
+
+
 def build_subgroup_points_from_rule(rule, normalize_spec=""):
     """
-    Generate all integer A/B/C/D compositions (sum=100) satisfying a logical rule.
-    The drawable Cantor domain uses 1 <= A+B <= 99, matching range-based fields.
+    Vectorized rule evaluation over the complete integer Cantor composition space.
+
+    This is much lighter on Streamlit Cloud than evaluating every rule inside
+    three nested Python loops.
     """
     validate_subgroup_rule(rule, normalize_spec)
-    rows = []
 
-    for a in range(0, 101):
-        for b in range(0, 101 - a):
-            ab = a + b
-            if ab < 1 or ab > 99:
-                continue
+    work = build_all_integer_compositions()
+    context = {
+        "A": work["A"].astype(float),
+        "B": work["B"].astype(float),
+        "C": work["C"].astype(float),
+        "D": work["D"].astype(float),
+    }
 
-            for c in range(0, 101 - a - b):
-                d = 100 - a - b - c
+    norm_vars = parse_normalize_spec(normalize_spec)
+    if norm_vars:
+        denom = sum(context[v] for v in norm_vars)
+        safe_denom = denom.where(denom > 0, np.nan)
+        for v in norm_vars:
+            context[f"{v}norm"] = context[v] / safe_denom * 100.0
 
-                if evaluate_subgroup_rule(a, b, c, d, rule, normalize_spec):
-                    x, y = calculate_final_position(a, b, c, d)
-                    if x is not None:
-                        rows.append((a, b, c, d, ab, x, y))
+    mask = pd.Series(True, index=work.index)
 
-    return pd.DataFrame(rows, columns=["A", "B", "C", "D", "AB", "x", "y"])
+    for left_name, operator, right_token in _parse_rule_conditions(rule):
+        if left_name not in context:
+            raise ValueError(
+                f"Variable '{left_name}' is not available. "
+                f"Check the Normalize column (currently '{normalize_spec}')."
+            )
+
+        left = context[left_name]
+
+        if right_token in {"A", "B", "C", "D", "Anorm", "Bnorm", "Cnorm", "Dnorm"}:
+            if right_token not in context:
+                raise ValueError(
+                    f"Variable '{right_token}' is not available. "
+                    f"Check the Normalize column (currently '{normalize_spec}')."
+                )
+            right = context[right_token]
+        else:
+            right = float(right_token)
+
+        if operator == "<":
+            cond = left < right
+        elif operator == "<=":
+            cond = left <= right
+        elif operator == ">":
+            cond = left > right
+        elif operator == ">=":
+            cond = left >= right
+        else:
+            cond = np.isclose(left, right, atol=1e-9)
+
+        mask &= pd.Series(cond, index=work.index).fillna(False)
+
+    return work.loc[mask].copy()
 
 
 def convex_hull_2d(points):
@@ -408,55 +495,78 @@ def rgba_with_alpha(color, alpha):
     raise ValueError(f"Unsupported color format: {color}")
 
 
-def add_rule_subgroup_heatmap(fig, sg, color, opacity=0.36):
-    """
-    Draw a rule-defined subgroup from its exact occupied integer cells.
+def _discrete_colorscale(colors):
+    """Colorscale whose integer category centres map exactly to subgroup colors."""
+    n = len(colors)
+    if n == 0:
+        return [[0.0, "#808080"], [1.0, "#808080"]]
+    if n == 1:
+        return [[0.0, colors[0]], [1.0, colors[0]]]
 
-    Unlike the classic min/max renderer, this does NOT replace a rule-defined
-    region by one bounding rectangle per AB slice. That is essential for
-    classifications such as Pettijohn, whose boundaries are coupled/oblique.
+    scale = [[0.0, colors[0]]]
+    for i, color in enumerate(colors):
+        scale.append([(i + 0.5) / n, color])
+    scale.append([1.0, colors[-1]])
+    return scale
+
+
+def add_rule_partition_heatmaps(fig, subgroup_results, color_map=None, opacity=0.38):
     """
-    pts = sg["points"]
-    if pts.empty:
+    Draw all rule-defined subgroups with only ONE heatmap per AB slice.
+
+    Maximum trace count for a complete rule classification is therefore 99,
+    instead of up to 99 x number_of_subgroups.
+    """
+    valid = [sg for sg in subgroup_results if not sg["points"].empty]
+    if not valid:
         return
 
-    fill_color = rgba_with_alpha(color, 1.0)
+    names = [sg["name"] for sg in valid]
+    colors = [
+        (color_map or {}).get(name, SUBGROUP_COLORS[i % len(SUBGROUP_COLORS)])
+        for i, name in enumerate(names)
+    ]
+    name_to_code = {name: i for i, name in enumerate(names)}
+    colorscale = _discrete_colorscale(colors)
+    n_codes = len(names)
 
-    for ab, group in pts.groupby("AB"):
+    by_ab = {
+        ab: np.full((101 - ab, ab + 1), np.nan, dtype=float)
+        for ab in range(1, 100)
+    }
+
+    for sg in valid:
+        code = float(name_to_code[sg["name"]])
+        for rec in sg["points"][["AB", "B", "C"]].itertuples(index=False):
+            ab = int(rec.AB)
+            b = int(rec.B)
+            c = int(rec.C)
+
+            # In case of overlapping rules, the first subgroup is drawn.
+            # Overlap statistics are still calculated from the exact point sets.
+            if np.isnan(by_ab[ab][c, b]):
+                by_ab[ab][c, b] = code
+
+    for ab in range(1, 100):
+        z = by_ab[ab]
+        if np.isnan(z).all():
+            continue
+
         row = int(99 - ab)
         row_start, _, _ = RECTANGLES[row]
 
-        b_min = int(group["B"].min())
-        b_max = int(group["B"].max())
-        c_min = int(group["C"].min())
-        c_max = int(group["C"].max())
-
-        b_values = np.arange(b_min, b_max + 1, dtype=int)
-        c_values = np.arange(c_min, c_max + 1, dtype=int)
-        x_values = row_start + b_values.astype(float) + 0.5
-        y_values = c_values.astype(float)
-
-        z = np.full((len(c_values), len(b_values)), np.nan, dtype=float)
-        b_index = {int(v): i for i, v in enumerate(b_values)}
-        c_index = {int(v): i for i, v in enumerate(c_values)}
-
-        for rec in group[["B", "C"]].itertuples(index=False):
-            z[c_index[int(rec.C)], b_index[int(rec.B)]] = 1.0
-
         fig.add_trace(
             go.Heatmap(
-                x=x_values,
-                y=y_values,
+                x=row_start + np.arange(ab + 1, dtype=float) + 0.5,
+                y=np.arange(0, 101 - ab, dtype=float),
                 z=z,
-                zmin=0.0,
-                zmax=1.0,
-                colorscale=[[0.0, fill_color], [1.0, fill_color]],
+                zmin=-0.5,
+                zmax=max(n_codes - 0.5, 0.5),
+                colorscale=colorscale,
                 showscale=False,
                 opacity=opacity,
                 zsmooth=False,
                 hoverinfo="skip",
-                name=sg["name"],
-                legendgroup=sg["name"],
                 showlegend=False,
             )
         )
@@ -470,6 +580,11 @@ def add_subgroup_fields(fig, subgroup_results, hull_width=1.0, subfield_width=1.
     define a rectangular subfield in the final Cantor-grid coordinates.
     No colored subgroup points are plotted.
     """
+    nonempty = [sg for sg in subgroup_results if not sg["points"].empty]
+    if nonempty and all(sg.get("definition_type", "range") == "rule" for sg in nonempty):
+        add_rule_partition_heatmaps(fig, nonempty, color_map=color_map)
+        return
+
     for idx, sg in enumerate(subgroup_results):
         pts = sg["points"]
         if pts.empty:
@@ -477,25 +592,6 @@ def add_subgroup_fields(fig, subgroup_results, hull_width=1.0, subfield_width=1.
 
         color = (color_map or {}).get(sg["name"], SUBGROUP_COLORS[idx % len(SUBGROUP_COLORS)])
 
-        # Rule-defined fields are rendered from exact occupied cells rather than
-        # one min/max bounding rectangle per AB slice.
-        if sg.get("definition_type", "range") == "rule":
-            add_rule_subgroup_heatmap(fig, sg, color)
-
-            # Keep a thin black outer hull for visual orientation.
-            hull = convex_hull_2d(pts[["x", "y"]].to_numpy())
-            if len(hull) >= 3:
-                hull_x = [p[0] for p in hull] + [hull[0][0]]
-                hull_y = [p[1] for p in hull] + [hull[0][1]]
-                fig.add_trace(
-                    go.Scatter(
-                        x=hull_x, y=hull_y, mode="lines",
-                        line=dict(color="black", width=hull_width),
-                        fill=None, hoverinfo="skip",
-                        legendgroup=sg["name"], showlegend=False
-                    )
-                )
-            continue
 
         # Subgroup rectangles use the exact color assigned by the active
         # color scale. The fill is translucent so the Cantor grid remains
