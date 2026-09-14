@@ -1,8 +1,6 @@
 streamlit
 pandas
 numpy
-scipy
-plotly<6
+plotly>=6.1.1,<7
 openpyxl
-Pillow
-kaleido==0.2.1
+kaleido>=1.0.0,<2
