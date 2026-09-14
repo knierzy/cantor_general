@@ -1,0 +1,8 @@
+streamlit
+pandas
+numpy
+scipy
+plotly<6
+openpyxl
+Pillow
+kaleido==0.2.1
