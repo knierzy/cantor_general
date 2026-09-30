@@ -1534,6 +1534,18 @@ show_subgroup_labels = st.checkbox(
     key="show_subgroup_labels_v2",
     help="Places the first two letters in the upper part of each subgroup field using a height-dependent, limited vertical offset to reduce overlap with sample points."
 )
+
+subgroup_label_size = st.slider(
+    "Subgroup label font size",
+    min_value=8,
+    max_value=40,
+    value=18,
+    step=1
+)
+
+
+
+
 show_gray_grid = st.checkbox("Show gray Cantor grid", value=True)
 show_overlap_hatching = st.checkbox(
     "Highlight subgroup overlap",
@@ -2075,7 +2087,7 @@ if show_subgroups and generated_subgroups:
                     text=[f"<b>{short_label}</b>"],
                     textposition="middle center",
                     textfont=dict(
-                        size=20,
+                        size=subgroup_label_size,
                         color="black",
                         family="Arial Black"
                     ),
@@ -2316,7 +2328,7 @@ if has_samples:
                     mode="text",
                     text=[f"<b>{short_label}</b>"],
                     textposition="middle center",
-                    textfont=dict(size=20, color="black", family="Arial Black"),
+                    textfont=dict(size=subgroup_label_size, color="black", family="Arial Black"),
                     hoverinfo="skip",
                     showlegend=False,
                     legendgroup=sg["name"]
