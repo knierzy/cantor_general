@@ -2448,27 +2448,27 @@ st.plotly_chart(fig, use_container_width=True)
 
 st.subheader("Export figure")
 
-try:
-    img_bytes = fig.to_image(
-        format="png",
-        width=PLOT_WIDTH,
-        height=PLOT_HEIGHT,
-        scale=2
-    )
+#try:
+ #   img_bytes = fig.to_image(
+#        format="png",
+#        width=PLOT_WIDTH,
+#        height=PLOT_HEIGHT,
+#        scale=2
+#    )
 
-    st.download_button(
-        label="Download PNG",
-        data=img_bytes,
-        file_name="cantor_grid.png",
-        mime="image/png"
-    )
+#    st.download_button(
+#        label="Download PNG",
+#        data=img_bytes,
+ #       file_name="cantor_grid.png",
+ #       mime="image/png"
+ #   )
 
-except Exception as exc:
-    st.warning(
-        "Figure export is currently unavailable. "
-        "For PNG export, make sure Kaleido is installed. "
-        f"Details: {exc}"
-    )
+#except Exception as exc:
+#    st.warning(
+#        "Figure export is currently unavailable. "
+#        "For PNG export, make sure Kaleido is installed. "
+#        f"Details: {exc}"
+#    )
 
 if has_samples:
     # ========================================================
