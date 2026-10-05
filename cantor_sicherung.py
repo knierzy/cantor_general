@@ -1,19 +1,40 @@
 import itertools
+import os
+import shutil
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.colors import sample_colorscale
 import streamlit as st
 
+
+# ------------------------------------------------------------
+# Find Chromium / Chrome for Kaleido PNG export
+# ------------------------------------------------------------
+chromium_path = (
+    shutil.which("chromium")
+    or shutil.which("chromium-browser")
+    or shutil.which("google-chrome")
+    or shutil.which("google-chrome-stable")
+)
+
+if chromium_path:
+    os.environ["BROWSER_PATH"] = chromium_path
+
+
 st.set_page_config(layout="wide", page_title="Cantor Grids")
 
 st.title("Cantor Grids – Four-Parameter Compositional Visualization")
 st.caption("Build: V36 — Aitchison / Log-Euclidean subgroup distance choice")
+
+# TEMPORARY diagnostic line
+st.write("Chromium path:", chromium_path)
+
 st.caption(
     "Define four compositional parameters, create subgroup fields from parameter ranges, "
     "and optionally add sample points manually or from Excel."
 )
-
 # ============================================================
 # Core Cantor-grid geometry
 # ============================================================
@@ -1513,6 +1534,18 @@ show_subgroup_labels = st.checkbox(
     key="show_subgroup_labels_v2",
     help="Places the first two letters in the upper part of each subgroup field using a height-dependent, limited vertical offset to reduce overlap with sample points."
 )
+
+subgroup_label_size = st.slider(
+    "Subgroup label font size",
+    min_value=8,
+    max_value=40,
+    value=18,
+    step=1
+)
+
+
+
+
 show_gray_grid = st.checkbox("Show gray Cantor grid", value=True)
 show_overlap_hatching = st.checkbox(
     "Highlight subgroup overlap",
@@ -2054,7 +2087,7 @@ if show_subgroups and generated_subgroups:
                     text=[f"<b>{short_label}</b>"],
                     textposition="middle center",
                     textfont=dict(
-                        size=20,
+                        size=subgroup_label_size,
                         color="black",
                         family="Arial Black"
                     ),
@@ -2295,7 +2328,7 @@ if has_samples:
                     mode="text",
                     text=[f"<b>{short_label}</b>"],
                     textposition="middle center",
-                    textfont=dict(size=20, color="black", family="Arial Black"),
+                    textfont=dict(size=subgroup_label_size, color="black", family="Arial Black"),
                     hoverinfo="skip",
                     showlegend=False,
                     legendgroup=sg["name"]
