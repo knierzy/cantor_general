@@ -498,7 +498,7 @@ def add_overlap_hatching(
     hatch_alpha=0.70,        # kept for compatibility
     hatch_width=1.60,        # kept for compatibility
     outline_alpha=1.0,
-    outline_width=2.8,
+    outline_width=2.0,
     fill_alpha=1.0
 ):
     """
@@ -506,12 +506,8 @@ def add_overlap_hatching(
     subgroup rectangles.
 
     Each AB slice is treated separately.
-    No neighbouring overlap rectangles are connected into larger polygons.
-
-    The overlap itself is drawn in red. In addition, a thin black X is drawn
-    across the centre of every true overlap rectangle. The X is constructed
-    from two independent line traces so its length and thickness can be
-    controlled separately.
+    Overlap areas are indicated by a black outline only.
+    No additional fill and no X markers are drawn.
     """
 
     valid = [
@@ -556,91 +552,64 @@ def add_overlap_hatching(
                     continue
 
                 # ------------------------------------------------
-                # Red overlap rectangle
+                # Overlap: alternating black/yellow outline
                 # ------------------------------------------------
+                segment_length = 0.5
+                colors = ["black", "white"]
+
+                # Vertical sides
+                for x_side in [x0, x1]:
+                    y = y0
+                    segment_index = 0
+
+                    while y < y1:
+                        y_end = min(y + segment_length, y1)
+
+                        fig.add_trace(
+                            go.Scatter(
+                                x=[x_side, x_side],
+                                y=[y, y_end],
+                                mode="lines",
+                                line=dict(
+                                    color=colors[segment_index % 2],
+                                    width=outline_width
+                                ),
+                                hoverinfo="skip",
+                                showlegend=False
+                            )
+                        )
+
+                        y = y_end
+                        segment_index += 1
+
+                # Horizontal top and bottom boundaries
                 fig.add_trace(
                     go.Scatter(
-                        x=[x0, x1, x1, x0, x0],
-                        y=[y0, y0, y1, y1, y0],
+                        x=[x0, x1],
+                        y=[y0, y0],
                         mode="lines",
                         line=dict(
-                            color=f"rgba(170,0,0,{outline_alpha})",
+                            color="black",
                             width=outline_width
                         ),
-                        fill="toself",
-                        fillcolor=f"rgba(255,0,0,{fill_alpha})",
                         hoverinfo="skip",
-                        showlegend=False,
-                        name=(
-                            f"Overlap: {name_a} – {name_b}, "
-                            f"AB={ab}"
-                        )
+                        showlegend=False
                     )
                 )
 
-                # ------------------------------------------------
-                # Thin black X across the overlap
-                # ------------------------------------------------
-                cross_x = (x0 + x1) / 2.0
-                cross_y = (y0 + y1) / 2.0
-
-                # Length and thickness are independent.
-                # These values are intentionally larger than the narrow
-                # overlap slices so the X may extend beyond the red subfield.
-                cross_half_x = 35.0
-                cross_half_y = 0.65
-                cross_width = 1.2
-
-                # Diagonal: bottom-left -> top-right
                 fig.add_trace(
                     go.Scatter(
-                        x=[
-                            cross_x - cross_half_x,
-                            cross_x + cross_half_x
-                        ],
-                        y=[
-                            cross_y - cross_half_y,
-                            cross_y + cross_half_y
-                        ],
+                        x=[x0, x1],
+                        y=[y1, y1],
                         mode="lines",
                         line=dict(
                             color="black",
-                            width=cross_width
+                            width=outline_width
                         ),
                         hoverinfo="skip",
-                        showlegend=False,
-                        name=(
-                            f"Overlap cross 1: {name_a} – {name_b}, "
-                            f"AB={ab}"
-                        )
+                        showlegend=False
                     )
                 )
-
-                # Diagonal: top-left -> bottom-right
-                fig.add_trace(
-                    go.Scatter(
-                        x=[
-                            cross_x - cross_half_x,
-                            cross_x + cross_half_x
-                        ],
-                        y=[
-                            cross_y + cross_half_y,
-                            cross_y - cross_half_y
-                        ],
-                        mode="lines",
-                        line=dict(
-                            color="black",
-                            width=cross_width
-                        ),
-                        hoverinfo="skip",
-                        showlegend=False,
-                        name=(
-                            f"Overlap cross 2: {name_a} – {name_b}, "
-                            f"AB={ab}"
-                        )
-                    )
-                )
-
 
 def dynamic_axis_font_size(text, base_size, min_size):
     """
@@ -1492,7 +1461,7 @@ with pc1:
 with pc2:
     colorscale = st.selectbox(
         "Sample color scale",
-        ["Viridis", "Plasma", "Turbo", "Rainbow", "Jet", "HSV",
+        ["Rainbow","Viridis", "Plasma", "Turbo", "Jet", "HSV",
            "Inferno", "Cividis", "RdYlBu", "YlOrRd"]
     )
 with pc3:
