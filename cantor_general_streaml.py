@@ -1815,24 +1815,19 @@ if has_samples:
             "(shared area as % of each field)</span><br>"
         )
 
-        for overlap in displayed_overlaps:
-            overlap_names = " – ".join(overlap["Names"])
-            overlap_values = " | ".join(
-                f"{name} {overlap['Percentages'][name]:.1f}%"
-                for name in overlap["Names"]
-            )
-            stats_legend_text += (
-                f"<span style='font-size:{overlap_fs}px;'>"
-                f"{overlap_names}: {overlap_values}"
-                "</span><br>"
-            )
+for overlap in displayed_overlaps:
+    overlap_names = " – ".join(overlap["Names"])
+    overlap_values = " | ".join(
+        f"{name} {overlap['Percentages'][name]:.1f}%"
+        for name in overlap["Names"]
+    )
 
-        if hidden_overlap_count > 0:
-            stats_legend_text += (
-                f"<span style='font-size:{overlap_fs}px; font-style:italic;'>"
-                f"+ {hidden_overlap_count} additional overlapping pair(s)"
-                "</span><br>"
-            )
+    stats_legend_text += (
+        f"<span style='font-size:{overlap_fs}px;'>"
+        f"{overlap_names}:<br>"
+        f"{overlap_values}"
+        "</span><br>"
+    )
 
 else:
     # Keep a subgroup legend box visible even when no sample points are plotted.
@@ -1943,17 +1938,19 @@ else:
             "(shared area as % of each field)</span><br>"
         )
 
-        for overlap in displayed_overlaps:
-            overlap_names = " – ".join(overlap["Names"])
-            overlap_values = " | ".join(
-                f"{name} {overlap['Percentages'][name]:.1f}%"
-                for name in overlap["Names"]
-            )
-            stats_legend_text += (
-                f"<span style='font-size:{overlap_fs}px;'>"
-                f"{overlap_names}: {overlap_values}"
-                "</span><br>"
-            )
+for overlap in displayed_overlaps:
+    overlap_names = " – ".join(overlap["Names"])
+    overlap_values = " | ".join(
+        f"{name} {overlap['Percentages'][name]:.1f}%"
+        for name in overlap["Names"]
+    )
+
+    stats_legend_text += (
+        f"<span style='font-size:{overlap_fs}px;'>"
+        f"{overlap_names}:<br>"
+        f"{overlap_values}"
+        "</span><br>"
+    )
 
         if hidden_overlap_count > 0:
             stats_legend_text += (
