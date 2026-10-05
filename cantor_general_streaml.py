@@ -552,29 +552,64 @@ def add_overlap_hatching(
                     continue
 
                 # ------------------------------------------------
-                # Overlap: black outline only
+                # Overlap: alternating black/yellow outline
                 # ------------------------------------------------
-                # ------------------------------------------------
-# Overlap: black outline only
-# ------------------------------------------------
-fig.add_trace(
-    go.Scatter(
-        x=[x0, x1, x1, x0, x0],
-        y=[y0, y0, y1, y1, y0],
-        mode="lines",
-        line=dict(
-            color="black",
-            width=outline_width
-        ),
-        fill=None,
-        hoverinfo="skip",
-        showlegend=False,
-        name=(
-            f"Overlap: {name_a} – {name_b}, "
-            f"AB={ab}"
-        )
-    )
-)
+                segment_length = 1.0
+                colors = ["black", "#FFD700"]
+
+                # Vertical sides
+                for x_side in [x0, x1]:
+                    y = y0
+                    segment_index = 0
+
+                    while y < y1:
+                        y_end = min(y + segment_length, y1)
+
+                        fig.add_trace(
+                            go.Scatter(
+                                x=[x_side, x_side],
+                                y=[y, y_end],
+                                mode="lines",
+                                line=dict(
+                                    color=colors[segment_index % 2],
+                                    width=outline_width
+                                ),
+                                hoverinfo="skip",
+                                showlegend=False
+                            )
+                        )
+
+                        y = y_end
+                        segment_index += 1
+
+                # Horizontal top and bottom boundaries
+                fig.add_trace(
+                    go.Scatter(
+                        x=[x0, x1],
+                        y=[y0, y0],
+                        mode="lines",
+                        line=dict(
+                            color="black",
+                            width=outline_width
+                        ),
+                        hoverinfo="skip",
+                        showlegend=False
+                    )
+                )
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=[x0, x1],
+                        y=[y1, y1],
+                        mode="lines",
+                        line=dict(
+                            color="black",
+                            width=outline_width
+                        ),
+                        hoverinfo="skip",
+                        showlegend=False
+                    )
+                )
 
 def dynamic_axis_font_size(text, base_size, min_size):
     """
