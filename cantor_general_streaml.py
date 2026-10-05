@@ -1518,7 +1518,7 @@ subgroup_label_size = st.slider(
 show_gray_grid = st.checkbox("Show gray Cantor grid", value=True)
 show_overlap_hatching = st.checkbox(
     "Highlight subgroup overlap",
-    value=True,
+    value=False,
     help="Adds a subtle diagonal hatch only where subgroup fields geometrically overlap."
 )
 
