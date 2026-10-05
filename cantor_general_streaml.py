@@ -1938,9 +1938,9 @@ else:
             "(shared area as % of each field)</span><br>"
         )
 
-for overlap in displayed_overlaps:
-    overlap_names = " – ".join(overlap["Names"])
-    overlap_values = " | ".join(
+    for overlap in displayed_overlaps:
+        overlap_names = " – ".join(overlap["Names"])
+        overlap_values = " | ".join(
         f"{name} {overlap['Percentages'][name]:.1f}%"
         for name in overlap["Names"]
     )
