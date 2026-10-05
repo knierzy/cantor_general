@@ -555,7 +555,7 @@ def add_overlap_hatching(
                 # Overlap: alternating black/yellow outline
                 # ------------------------------------------------
                 segment_length = 1.0
-                colors = ["black", "#FFD700"]
+                colors = ["black", "white"]
 
                 # Vertical sides
                 for x_side in [x0, x1]:
