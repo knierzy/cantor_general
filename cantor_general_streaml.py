@@ -1461,7 +1461,7 @@ with pc1:
 with pc2:
     colorscale = st.selectbox(
         "Sample color scale",
-        ["Viridis", "Plasma", "Turbo", "Rainbow", "Jet", "HSV",
+        ["Rainbow","Viridis", "Plasma", "Turbo", "Jet", "HSV",
            "Inferno", "Cividis", "RdYlBu", "YlOrRd"]
     )
 with pc3:
