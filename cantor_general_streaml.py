@@ -554,24 +554,27 @@ def add_overlap_hatching(
                 # ------------------------------------------------
                 # Overlap: black outline only
                 # ------------------------------------------------
-                fig.add_trace(
-                    go.Scatter(
-                        x=[x0, x1, x1, x0, x0],
-                        y=[y0, y0, y1, y1, y0],
-                        mode="lines",
-                        line=dict(
-                            color="black",
-                            width=outline_width
-                        ),
-                        fill=None,
-                        hoverinfo="skip",
-                        showlegend=False,
-                        name=(
-                            f"Overlap: {name_a} – {name_b}, "
-                            f"AB={ab}"
-                        )
-                    )
-                )
+                # ------------------------------------------------
+# Overlap: black outline only
+# ------------------------------------------------
+fig.add_trace(
+    go.Scatter(
+        x=[x0, x1, x1, x0, x0],
+        y=[y0, y0, y1, y1, y0],
+        mode="lines",
+        line=dict(
+            color="black",
+            width=outline_width
+        ),
+        fill=None,
+        hoverinfo="skip",
+        showlegend=False,
+        name=(
+            f"Overlap: {name_a} – {name_b}, "
+            f"AB={ab}"
+        )
+    )
+)
 
 def dynamic_axis_font_size(text, base_size, min_size):
     """
