@@ -1241,6 +1241,10 @@ The letters A–D refer to the parameter names defined above.
                 st.error("Missing required columns: " + ", ".join(missing_cols))
             else:
                 sg_df = sg_df[required_cols].copy()
+
+                # Vollständig leere Subgruppen-Zeilen ignorieren
+                sg_df = sg_df.dropna(subset=["Subgroup"])
+
                 numeric_cols = required_cols[1:]
 
                 for col in numeric_cols:
