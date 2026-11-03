@@ -7,7 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.colors import sample_colorscale
 import streamlit as st
-
+import math
 
 # ------------------------------------------------------------
 # Find Chromium / Chrome for Kaleido PNG export
@@ -1257,11 +1257,10 @@ The letters A–D refer to the parameter names defined above.
                             name = f"Subgroup {idx + 1}"
 
                         ranges = [
-                            (int(row["A_min"]), int(row["A_max"])),
-                            (int(row["B_min"]), int(row["B_max"])),
-                            (int(row["C_min"]), int(row["C_max"])),
-                            (int(row["D_min"]), int(row["D_max"]))
-                        ]
+                           (math.floor(row["A_min"]), math.ceil(row["A_max"])),
+                           (math.floor(row["B_min"]), math.ceil(row["B_max"])),
+                           (math.floor(row["C_min"]), math.ceil(row["C_max"])),
+                           (math.floor(row["D_min"]), math.ceil(row["D_max"]))]
 
                         range_error = any(
                             lo < 0 or hi > 100 or lo > hi
