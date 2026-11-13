@@ -1528,27 +1528,20 @@ show_overlap_hatching = st.checkbox(
 # Multivariate distance metric. The recommended default depends on the task:
 # - without samples: Aitchison for subgroup-to-reference comparison
 # - with samples: diagonal Mahalanobis for assignment to differently dispersed fields
-samples_requested = sample_mode != "No sample points"
+# Multivariate distance metric – same selection in both modes
 metric_options = ["Mahalanobis", "Aitchison", "Log-Euclidean"]
-metric_default_index = 0 if samples_requested else 1
-metric_widget_key = (
-    "distance_metric_with_samples" if samples_requested
-    else "distance_metric_without_samples"
-)
 
 distance_metric = st.selectbox(
     "Multivariate distance metric",
     metric_options,
-    index=metric_default_index,
-    key=metric_widget_key,
+    index=1,
+    key="distance_metric_unified_v37",
     help=(
-        "Default: Mahalanobis (diagonal covariance) when sample points are used, "
-        "because subgroup-specific spread is considered during classification. "
-        "Default: Aitchison when only subgroup fields are compared relative to a reference. "
-        "You can override the default in either mode."
+        "Choose Mahalanobis, Aitchison or Log-Euclidean distance. "
+        "The selected metric is used for subgroup comparisons "
+        "and sample classification."
     )
 )
-
 if distance_metric == "Aitchison":
     aitchison_zero_replacement = st.number_input(
         "Aitchison zero replacement δ (%)",
