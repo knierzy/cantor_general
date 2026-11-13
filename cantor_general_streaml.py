@@ -26,7 +26,7 @@ if chromium_path:
 st.set_page_config(layout="wide", page_title="Cantor Grids")
 
 st.title("Cantor Grids – Four-Parameter Compositional Visualization")
-st.caption("Build: V36 — Aitchison / Log-Euclidean subgroup distance choice")
+st.caption("Build: V38 — optional adaptive distance colorbar")
 
 # TEMPORARY diagnostic line
 st.write("Chromium path:", chromium_path)
@@ -805,6 +805,64 @@ def pooled_diagonal_mahalanobis_distance(mu_i, mu_j, sigma_i, sigma_j):
     return float(np.sqrt(np.sum(((mu_i - mu_j) / pooled_sigma) ** 2)))
 
 
+# Adaptive distance color scale: 64% of color variation is concentrated
+# in the densest interval spanning 10% of the observed distance range.
+FOCUS_WINDOW_FRACTION = 0.10
+FOCUS_COLOR_FRACTION = 0.64
+
+
+def adaptive_distance_colorscale(base_scale, distances):
+    """Return a Plotly colorscale with enhanced contrast in a dense interval.
+
+    The reference distance (zero) is excluded when finding the dense subgroup
+    cluster, but remains part of the displayed colorbar domain.
+    """
+    vals = np.asarray(list(distances), dtype=float)
+    vals = vals[np.isfinite(vals)]
+    if len(vals) < 3 or float(np.max(vals)) <= 0:
+        return base_scale
+
+    maximum = float(np.max(vals))
+    positive = np.sort(vals[vals > 0])
+    if len(positive) < 2:
+        return base_scale
+
+    width = maximum * FOCUS_WINDOW_FRACTION
+    # Find the width-10% window containing the most non-reference distances.
+    best_count, best_lo = -1, float(positive[0])
+    for lo in positive:
+        count = int(np.searchsorted(positive, lo + width, side="right")
+                    - np.searchsorted(positive, lo, side="left"))
+        if count > best_count:
+            best_count, best_lo = count, float(lo)
+
+    left = min(best_lo, maximum - width)
+    right = left + width
+    a, b = left / maximum, right / maximum
+    if a <= 1e-9 or b >= 1 - 1e-9:
+        # One-sided interval: distribute the remaining color variation
+        # over the only available outside segment.
+        if a <= 1e-9:
+            knots = [(0.0, 0.0), (b, FOCUS_COLOR_FRACTION), (1.0, 1.0)]
+        else:
+            knots = [(0.0, 0.0), (a, 1.0 - FOCUS_COLOR_FRACTION), (1.0, 1.0)]
+    else:
+        # Share the remaining 36% proportionally to the two outside lengths.
+        remaining = 1.0 - FOCUS_COLOR_FRACTION
+        left_share = remaining * a / (a + 1.0 - b)
+        knots = [(0.0, 0.0), (a, left_share),
+                 (b, left_share + FOCUS_COLOR_FRACTION), (1.0, 1.0)]
+
+    # Plotly interpolates color stops; densely sample the transformed base
+    # palette to preserve its appearance, including non-linear gradients.
+    xs = np.unique(np.r_[np.linspace(0, 1, 257),
+                         [k[0] for k in knots]])
+    xp, fp = zip(*knots)
+    transformed = np.interp(xs, xp, fp)
+    colors = sample_colorscale(base_scale, transformed.tolist())
+    return [[float(x), color] for x, color in zip(xs, colors)]
+
+
 def subgroup_reference_distance_colors(
     subgroup_results,
     colorscale,
@@ -1490,6 +1548,19 @@ with pc4:
         )
     )
 
+colorbar_mode = st.selectbox(
+    "Distance colorbar distribution",
+    ["Linear", "Adaptive (focus on clustered distances)"],
+    index=0,
+    help=(
+        "Adaptive: allocates 64% of the color variation to the densest "
+        "distance interval spanning 10% of the total distance range. "
+        "With subgroup fields, the reference subgroup is excluded when "
+        "finding this interval. With sample points, sample distances "
+        "determine the focus."
+    )
+)
+
 legend_scale = st.slider(
     "Statistics box size factor",
     min_value=0.5,
@@ -1649,6 +1720,20 @@ else:
         distance_metric=distance_metric,
         aitchison_zero_replacement=aitchison_zero_replacement
     )
+
+    if colorbar_mode.startswith("Adaptive") and subgroup_reference_distances:
+        active_distance_colorscale = adaptive_distance_colorscale(
+            colorscale, subgroup_reference_distances.values()
+        )
+        max_d = max(subgroup_reference_distances.values())
+        subgroup_distance_color_map = {
+            name: sample_colorscale(
+                active_distance_colorscale, [d / max_d if max_d > 0 else 0.0]
+            )[0]
+            for name, d in subgroup_reference_distances.items()
+        }
+    else:
+        active_distance_colorscale = colorscale
 
     summary_df = pd.DataFrame(columns=["Subgroup", "Points", "Percent"])
     first_locality = "no sample points"
@@ -2092,7 +2177,7 @@ if (not has_samples) and reference_subgroup is not None and subgroup_reference_d
             marker=dict(
                 size=0.1,
                 color=[0.0],
-                colorscale=colorscale,
+                colorscale=active_distance_colorscale,
                 cmin=0.0,
                 cmax=max(max_ref_distance, 1e-9),
                 showscale=True,
@@ -2142,6 +2227,11 @@ if has_samples:
         if len(finite_sample_distances) > 0 else 1.0
     )
     max_sample_distance = max(max_sample_distance, 1e-9)
+
+    sample_distance_colorscale = (
+        adaptive_distance_colorscale(colorscale, finite_sample_distances)
+        if colorbar_mode.startswith("Adaptive") else colorscale
+    )
 
     hover_text = [
         (
@@ -2212,7 +2302,7 @@ if has_samples:
             marker=dict(
                 size=color_ring_size,
                 color=sample_distances,
-                colorscale=colorscale,
+                colorscale=sample_distance_colorscale,
                 cmin=0.0,
                 cmax=max_sample_distance,
                 opacity=0.95,
