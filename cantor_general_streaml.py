@@ -1820,8 +1820,10 @@ parameter_mapping_html = (
     f"<b>C</b> = {escape(labels[2])}&nbsp;&nbsp;&nbsp;"
     f"<b>D</b> = {escape(labels[3])}"
 )
-parameter_mapping_fs = max(12, int(19 * legend_scale))
-parameter_mapping_height_px = 2 * parameter_mapping_fs * 1.35 + 14 * legend_scale
+parameter_mapping_fs = max(15, int(27 * legend_scale))
+overlap_header_fs = max(16, int(29 * legend_scale))
+overlap_fs = max(15, int(26 * legend_scale))
+parameter_mapping_height_px = 2 * parameter_mapping_fs * 1.45 + 18 * legend_scale
 
 if has_samples:
     # Dynamic statistics-box sizing.
@@ -1859,8 +1861,8 @@ if has_samples:
     padding_top_px = 18 * legend_scale
     padding_bottom_px = 24 * legend_scale
 
-    overlap_header_px = 24 * legend_scale
-    overlap_block_px = (18 + 24 + 22) * legend_scale
+    overlap_header_px = overlap_header_fs * 1.4
+    overlap_block_px = (18 * legend_scale + overlap_header_fs * 1.45 + overlap_fs * 1.45 + 12 * legend_scale)
 
     legend_height_px = (
         padding_top_px
@@ -1885,8 +1887,8 @@ if has_samples:
     width_entries = [
         (classification_distance_title, title_fs, True),
         (f"Locality: {first_locality}", locality_fs, False),
-        ("Subgroup field overlap", int(22 * legend_scale), True),
-        (overlap_summary_text, int(20 * legend_scale), False),
+        ("Subgroup field overlap", overlap_header_fs, True),
+        (overlap_summary_text, overlap_fs, False),
         (parameter_mapping_plain, parameter_mapping_fs, False),
     ]
     if distance_metric == "Mahalanobis":
@@ -1936,8 +1938,6 @@ if has_samples:
             f'</span><br>'
         )
 
-    overlap_fs = int(20 * legend_scale)
-    overlap_header_fs = int(22 * legend_scale)
     stats_legend_text += (
         f"<br><span style='font-size:{overlap_header_fs}px; font-weight:bold;'>"
         "Subgroup field overlap</span><br>"
@@ -1960,8 +1960,8 @@ else:
     padding_bottom_px = 24 * legend_scale
     gap_before_groups_px = 18 * legend_scale
 
-    overlap_header_px = 24 * legend_scale
-    overlap_block_px = (18 + 24 + 22) * legend_scale
+    overlap_header_px = overlap_header_fs * 1.4
+    overlap_block_px = (18 * legend_scale + overlap_header_fs * 1.45 + overlap_fs * 1.45 + 12 * legend_scale)
 
     legend_height_px = (
         padding_top_px
@@ -1984,8 +1984,8 @@ else:
     width_entries = [
         (distance_title, title_fs, True),
         (f"Reference: {ref_text_for_width} ({ref_note_for_width})", int(22 * legend_scale), False),
-        ("Subgroup field overlap", int(22 * legend_scale), True),
-        (overlap_summary_text, int(20 * legend_scale), False),
+        ("Subgroup field overlap", overlap_header_fs, True),
+        (overlap_summary_text, overlap_fs, False),
         (parameter_mapping_plain, parameter_mapping_fs, False),
     ]
     for sg in generated_subgroups:
@@ -2030,8 +2030,6 @@ else:
             f'<span style="font-size:{int(23 * legend_scale)}px;">d={distance_txt}</span><br>'
         )
 
-    overlap_fs = int(20 * legend_scale)
-    overlap_header_fs = int(22 * legend_scale)
     stats_legend_text += (
         f"<br><span style='font-size:{overlap_header_fs}px; font-weight:bold;'>"
         "Subgroup field overlap</span><br>"
