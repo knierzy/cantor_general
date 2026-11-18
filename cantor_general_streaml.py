@@ -1,4 +1,5 @@
 import itertools
+from html import escape
 from io import BytesIO
 import os
 import shutil
@@ -1807,6 +1808,21 @@ def adaptive_statistics_box_width(entries, plot_width, scale=1.0):
     return min(0.90, max(0.12, desired_px / available_px))
 
 
+# Automatically show the current Streamlit A/B/C/D assignments in the plot.
+# Escape HTML because Plotly annotations support HTML-like formatting.
+parameter_mapping_plain = (
+    f"A = {labels[0]}    B = {labels[1]} | "
+    f"C = {labels[2]}    D = {labels[3]}"
+)
+parameter_mapping_html = (
+    f"<b>A</b> = {escape(labels[0])}&nbsp;&nbsp;&nbsp;"
+    f"<b>B</b> = {escape(labels[1])}<br>"
+    f"<b>C</b> = {escape(labels[2])}&nbsp;&nbsp;&nbsp;"
+    f"<b>D</b> = {escape(labels[3])}"
+)
+parameter_mapping_fs = max(12, int(19 * legend_scale))
+parameter_mapping_height_px = 2 * parameter_mapping_fs * 1.35 + 14 * legend_scale
+
 if has_samples:
     # Dynamic statistics-box sizing.
     # Height grows with subgroup count, while the user can scale the whole box.
@@ -1854,6 +1870,7 @@ if has_samples:
         + gap_before_groups_px
         + n_subgroups * subgroup_line_px
         + overlap_block_px
+        + parameter_mapping_height_px
         + padding_bottom_px
     )
 
@@ -1870,6 +1887,7 @@ if has_samples:
         (f"Locality: {first_locality}", locality_fs, False),
         ("Subgroup field overlap", int(22 * legend_scale), True),
         (overlap_summary_text, int(20 * legend_scale), False),
+        (parameter_mapping_plain, parameter_mapping_fs, False),
     ]
     if distance_metric == "Mahalanobis":
         width_entries.append(("Mahalanobis distance (diagonal covariance)", title_fs, True))
@@ -1925,6 +1943,8 @@ if has_samples:
         "Subgroup field overlap</span><br>"
         f"<span style='font-size:{overlap_fs}px;'>"
         f"{overlap_summary_text}</span><br>"
+        f"<br><span style='font-size:{parameter_mapping_fs}px;'>"
+        f"{parameter_mapping_html}</span>"
     )
 
 else:
@@ -1949,6 +1969,7 @@ else:
         + gap_before_groups_px
         + n_subgroups * subgroup_line_px
         + overlap_block_px
+        + parameter_mapping_height_px
         + padding_bottom_px
     )
 
@@ -1965,6 +1986,7 @@ else:
         (f"Reference: {ref_text_for_width} ({ref_note_for_width})", int(22 * legend_scale), False),
         ("Subgroup field overlap", int(22 * legend_scale), True),
         (overlap_summary_text, int(20 * legend_scale), False),
+        (parameter_mapping_plain, parameter_mapping_fs, False),
     ]
     for sg in generated_subgroups:
         if sg["points"].empty:
@@ -2015,6 +2037,8 @@ else:
         "Subgroup field overlap</span><br>"
         f"<span style='font-size:{overlap_fs}px;'>"
         f"{overlap_summary_text}</span><br>"
+        f"<br><span style='font-size:{parameter_mapping_fs}px;'>"
+        f"{parameter_mapping_html}</span>"
     )
 
 fig = go.Figure()
