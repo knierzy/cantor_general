@@ -2445,7 +2445,7 @@ fig.update_layout(
         tickvals=tickvals,
         ticktext=ticktext,
         tickangle=0,
-        tickfont=dict(size=16, color="black"),
+        tickfont=dict(size=20, color="black"),
         automargin=True,
         showgrid=False,
         zeroline=False,
