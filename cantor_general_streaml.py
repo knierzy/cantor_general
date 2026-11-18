@@ -26,7 +26,7 @@ if chromium_path:
 st.set_page_config(layout="wide", page_title="Cantor Grids")
 
 st.title("Cantor Grids – Four-Parameter Compositional Visualization")
-st.caption("Build: V38 — optional adaptive distance colorbar")
+st.caption("Build: V39 — garnet-style aspect ratio and reference gridlines")
 
 # TEMPORARY diagnostic line
 st.write("Chromium path:", chromium_path)
@@ -1741,8 +1741,20 @@ else:
 reference_is_automatic = selected_reference_name is None
 
 
-PLOT_WIDTH = 1700
-PLOT_HEIGHT = 950
+# Garnet-style plot dimensions. These also control the PNG export.
+st.subheader("Diagram dimensions")
+plot_col1, plot_col2 = st.columns(2)
+with plot_col1:
+    PLOT_WIDTH = st.number_input(
+        "Plot width (px)", min_value=1000, max_value=5000,
+        value=2260, step=100, key="cantor_plot_width"
+    )
+with plot_col2:
+    PLOT_HEIGHT = st.number_input(
+        "Plot height (px)", min_value=600, max_value=3500,
+        value=1210, step=50, key="cantor_plot_height"
+    )
+
 
 # Pairwise and three-way geometric overlap of visible subgroup fields.
 # Percentages are reported separately relative to each participating field.
@@ -2057,7 +2069,7 @@ for y in range(10, 100, 10):
         x1=RECTANGLES[-1][0] + RECTANGLES[-1][1] + 10,
         y0=y,
         y1=y,
-        line=dict(color="rgba(80,80,80,0.45)", width=0.8, dash="dash"),
+        line=dict(color="rgba(0,0,0,0.55)", width=0.5, dash="dash"),
         layer="above"
     )
 
@@ -2066,7 +2078,7 @@ for x in [442, 909.5, 1352, 1769.5, 2162, 2529.5, 2872, 3189.5, 3482,
     fig.add_shape(
         type="line",
         x0=x, x1=x, y0=0, y1=100,
-        line=dict(color="rgba(80,80,80,0.55)", width=0.8, dash="dash"),
+        line=dict(color="rgba(0,0,0,0.70)", width=1.0, dash="dash"),
         layer="above"
     )
 
