@@ -1772,6 +1772,41 @@ overlap_summary_text = (
 )
 
 
+def adaptive_statistics_box_width(entries, plot_width, scale=1.0):
+    """Estimate text widths in pixels, then convert to Plotly paper coordinates.
+
+    entries contains (text, font_size, bold) tuples. The width is based on
+    rendered font metrics when Pillow is available, with a safe fallback.
+    """
+    try:
+        from PIL import ImageFont
+    except ImportError:
+        ImageFont = None
+
+    def text_width(value, size, bold=False):
+        value = str(value)
+        size = max(8, int(size))
+        if ImageFont is not None:
+            font_names = (["DejaVuSans-Bold.ttf", "Arialbd.ttf"] if bold
+                          else ["DejaVuSans.ttf", "Arial.ttf"])
+            for font_name in font_names:
+                try:
+                    font = ImageFont.truetype(font_name, size)
+                    return float(font.getlength(value))
+                except (OSError, AttributeError):
+                    pass
+        # Weighted approximation if no suitable TrueType font is installed.
+        return sum(0.35 if ch in "ilI.,:;!| '" else
+                   0.95 if ch in "MW@%" else 0.58 for ch in value) * size * (1.08 if bold else 1)
+
+    max_text_px = max((text_width(t, fs, bold) for t, fs, bold in entries), default=0)
+    # The Plotly plot uses a 70 px right margin, so paper x=1 spans this width.
+    available_px = max(1, float(plot_width) - 70.0)
+    # Extra room for colored square, whitespace and the annotation's left edge.
+    desired_px = max_text_px + 38 * scale
+    return min(0.90, max(0.12, desired_px / available_px))
+
+
 if has_samples:
     # Dynamic statistics-box sizing.
     # Height grows with subgroup count, while the user can scale the whole box.
@@ -1830,32 +1865,24 @@ if has_samples:
     legend_y1 = 0.98
     legend_y0 = max(0.02, legend_y1 - legend_height)
 
-    # Approximate width from longest rendered legend entry.
-    # Width follows the longest complete visible entry, not separate name/count maxima.
-    complete_entries = []
-    for _, _row in summary_df.iterrows():
-        complete_entries.append(
-            f"{_row['Subgroup']} {int(_row['Points'])} points ({float(_row['Percent']):.1f}%)"
-        )
-
-    overlap_entries = [overlap_summary_text]
-
-    longest_entry_chars = max(
-        [len(classification_distance_title),
-         len(f"Locality: {first_locality}"),
-         len("Subgroup field overlap")]
-        + [len(x) for x in complete_entries]
-        + [len(x) for x in overlap_entries]
-    )
-
-    # Character-based width estimate with padding. Cap prevents the box from
-    # swallowing the whole plot for unusually long labels.
-    legend_width = min(
-        0.82,
-        max(0.36, (0.10 + longest_entry_chars * 0.0080) * legend_scale)
-    )
+    width_entries = [
+        (classification_distance_title, title_fs, True),
+        (f"Locality: {first_locality}", locality_fs, False),
+        ("Subgroup field overlap", int(22 * legend_scale), True),
+        (overlap_summary_text, int(20 * legend_scale), False),
+    ]
+    if distance_metric == "Mahalanobis":
+        width_entries.append(("Mahalanobis distance (diagonal covariance)", title_fs, True))
+    for _, row in summary_df.iterrows():
+        # Include the colored square, group label and point count on one line.
+        width_entries.append((
+            f"■  {row['Subgroup']}  {int(row['Points'])} points ({float(row['Percent']):.1f}%)",
+            max(group_fs, count_fs), True
+        ))
     legend_x0 = 0.015
-    legend_x1 = min(0.92, legend_x0 + legend_width)
+    legend_x1 = min(0.98, legend_x0 + adaptive_statistics_box_width(
+        width_entries, PLOT_WIDTH, legend_scale
+    ))
 
     # In-plot classification box: same compact layout as the distance-only view.
     # The selected metric is the heading; locality follows directly below.
@@ -1929,30 +1956,26 @@ else:
     legend_y1 = 0.98
     legend_y0 = max(0.02, legend_y1 - legend_height)
 
-    nonempty_names = [
-        sg["name"] for sg in generated_subgroups if not sg["points"].empty
+    ref_text_for_width = reference_subgroup if reference_subgroup is not None else "not available"
+    ref_note_for_width = (
+        "automatic: largest mean distance" if reference_is_automatic else "user selected"
+    )
+    width_entries = [
+        (distance_title, title_fs, True),
+        (f"Reference: {ref_text_for_width} ({ref_note_for_width})", int(22 * legend_scale), False),
+        ("Subgroup field overlap", int(22 * legend_scale), True),
+        (overlap_summary_text, int(20 * legend_scale), False),
     ]
-    overlap_entries = [overlap_summary_text]
-
-    longest_entry_chars = max(
-        [
-            len(distance_title),
-            len(
-                f"Reference: {reference_subgroup} "
-                + ("(automatic: largest mean distance)" if reference_is_automatic else "(user selected)")
-            ),
-            len("Subgroup field overlap")
-        ]
-        + [len(name) + 9 for name in nonempty_names]
-        + [len(x) for x in overlap_entries]
-    )
-
-    legend_width = min(
-        0.62,
-        max(0.28, (0.10 + longest_entry_chars * 0.0080) * legend_scale)
-    )
+    for sg in generated_subgroups:
+        if sg["points"].empty:
+            continue
+        name = sg["name"]
+        distance_value = subgroup_reference_distances.get(name, 0.0) if subgroup_reference_distances else 0.0
+        width_entries.append((f"■  {name}  d={distance_value:.2f}", group_fs, True))
     legend_x0 = 0.015
-    legend_x1 = min(0.92, legend_x0 + legend_width)
+    legend_x1 = min(0.98, legend_x0 + adaptive_statistics_box_width(
+        width_entries, PLOT_WIDTH, legend_scale
+    ))
 
     ref_text = reference_subgroup if reference_subgroup is not None else "not available"
     reference_note = (
