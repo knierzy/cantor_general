@@ -28,10 +28,10 @@ if chromium_path:
 st.set_page_config(layout="wide", page_title="Cantor Grids")
 
 st.title("Cantor Grids – Four-Parameter Compositional Visualization")
-st.caption("Build: V42 — responsive statistics box with automatic text-fit border")
+st.caption("")
 
 # TEMPORARY diagnostic line
-st.write("Chromium path:", chromium_path)
+st.write()
 
 st.caption(
     "Define four compositional parameters, create subgroup fields from parameter ranges, "
