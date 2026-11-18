@@ -27,7 +27,7 @@ if chromium_path:
 st.set_page_config(layout="wide", page_title="Cantor Grids")
 
 st.title("Cantor Grids – Four-Parameter Compositional Visualization")
-st.caption("Build: V40 — compact overlap summary and detailed Excel export")
+st.caption("Build: V42 — responsive statistics box with automatic text-fit border")
 
 # TEMPORARY diagnostic line
 st.write("Chromium path:", chromium_path)
@@ -2462,21 +2462,9 @@ fig.add_shape(
 # IN-PLOT STATISTICS / SUBGROUP BOX
 # ========================================================
 
-# White rectangle behind the statistics text
-fig.add_shape(
-    type="rect",
-    xref="paper",
-    yref="paper",
-    x0=legend_x0,
-    x1=legend_x1,
-    y0=legend_y0,
-    y1=legend_y1,
-    fillcolor="white",
-    line=dict(color="black", width=3),
-    layer="above"
-)
-
-# IMPORTANT: use update_layout(annotations=[...]) exactly as in the garnet script
+# Plotly automatically sizes the annotation background to its rendered HTML text.
+# Unlike a separately positioned shape, the border follows the text when
+# Streamlit resizes the chart to the available browser width.
 fig.update_layout(
     annotations=[
         dict(
@@ -2487,8 +2475,10 @@ fig.update_layout(
             text=stats_legend_text,
             showarrow=False,
             font=dict(size=max(16, int(28 * legend_scale)), color="black"),
-            bgcolor="rgba(0,0,0,0)",
-            borderwidth=0,
+            bgcolor="white",
+            bordercolor="black",
+            borderwidth=3,
+            borderpad=max(7, int(12 * legend_scale)),
             xanchor="left",
             yanchor="top",
             align="left",
@@ -2497,7 +2487,6 @@ fig.update_layout(
     ],
     showlegend=False
 )
-
 
 
 st.plotly_chart(fig, use_container_width=True)
