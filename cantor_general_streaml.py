@@ -1753,7 +1753,7 @@ with plot_col1:
 with plot_col2:
     PLOT_HEIGHT = st.number_input(
         "Plot height (px)", min_value=600, max_value=3500,
-        value=800, step=50, key="cantor_plot_height"
+        value=1000, step=50, key="cantor_plot_height"
     )
 
 
