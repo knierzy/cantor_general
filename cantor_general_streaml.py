@@ -127,7 +127,7 @@ def calculate_final_position(a, b, c, d):
     return raw_y, raw_x
 
 
-def add_gray_cantor_grid(fig):
+def add_gray_cantor_grid(fig, grid_opacity=1.0):
     """
     Reproduces the gray triangular Cantor-grid domain from the original garnet app.
     Coordinates are added directly in final (rotated) orientation.
@@ -141,7 +141,7 @@ def add_gray_cantor_grid(fig):
 
         for step in range(gradient_steps):
             gray = int(gray_start + (gray_end - gray_start) * (step / max(gradient_steps - 1, 1)))
-            alpha = 0.8 - (0.6 * (step / max(gradient_steps - 1, 1)))
+            alpha = (0.8 - (0.6 * (step / max(gradient_steps - 1, 1)))) * grid_opacity
             fill = f"rgba({gray},{gray},{gray},{alpha})"
 
             raw_y0 = row_start + (step / gradient_steps) * height
@@ -168,7 +168,7 @@ def add_gray_cantor_grid(fig):
                     x=[row_start, row_start + height],
                     y=[raw_x, raw_x],
                     mode="lines",
-                    line=dict(color="rgba(100,100,100,0.65)", width=0.8),
+                    line=dict(color=f"rgba(100,100,100,{0.65 * grid_opacity:.3f})", width=0.8),
                     hoverinfo="skip",
                     showlegend=False
                 )
@@ -1606,7 +1606,19 @@ subgroup_label_size = st.slider(
 
 
 
-show_gray_grid = st.checkbox("Show gray Cantor grid", value=True)
+cantor_grid_transparency = st.slider(
+    "Cantor grid transparency (%)",
+    min_value=0,
+    max_value=95,
+    value=0,
+    step=5,
+    help=(
+        "Adjusts the transparency of the gray Cantor grid, including its "
+        "gray background cells and fine internal grid lines. "
+        "The grid is always displayed; subgroup colors and hulls are unaffected."
+    )
+)
+cantor_grid_opacity = 1.0 - cantor_grid_transparency / 100.0
 show_overlap_hatching = st.checkbox(
     "Highlight subgroup overlap",
     value=True,
@@ -2057,8 +2069,7 @@ else:
 fig = go.Figure()
 
 # Background first
-if show_gray_grid:
-    add_gray_cantor_grid(fig)
+add_gray_cantor_grid(fig, grid_opacity=cantor_grid_opacity)
 
 # Reference grid lines
 for y in range(10, 100, 10):
