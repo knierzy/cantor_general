@@ -1914,7 +1914,7 @@ if has_samples:
     width_entries = [
         (classification_distance_title, title_fs, True),
         (f"Locality: {first_locality}", locality_fs, False),
-        ("Subgroup field overlap", overlap_header_fs, True),
+        ("◧◨ Subgroup field overlap", overlap_header_fs, True),
         (overlap_summary_text, overlap_fs, False),
         (parameter_mapping_plain, parameter_mapping_fs, False),
     ]
@@ -1967,7 +1967,7 @@ if has_samples:
 
     stats_legend_text += (
         f"<br><span style='font-size:{overlap_header_fs}px; font-weight:bold;'>"
-        "Subgroup field overlap</span><br>"
+        "<span style='font-family:Arial,sans-serif; font-weight:bold;'>◧◨</span> Subgroup field overlap</span><br>"
         f"<span style='font-size:{overlap_fs}px;'>"
         f"{overlap_summary_text}</span><br>"
         f"<br><span style='font-size:{parameter_mapping_fs}px;'>"
@@ -2011,7 +2011,7 @@ else:
     width_entries = [
         (distance_title, title_fs, True),
         (f"Reference: {ref_text_for_width} ({ref_note_for_width})", int(22 * legend_scale), False),
-        ("Subgroup field overlap", overlap_header_fs, True),
+        ("◧◨ Subgroup field overlap", overlap_header_fs, True),
         (overlap_summary_text, overlap_fs, False),
         (parameter_mapping_plain, parameter_mapping_fs, False),
     ]
@@ -2059,7 +2059,7 @@ else:
 
     stats_legend_text += (
         f"<br><span style='font-size:{overlap_header_fs}px; font-weight:bold;'>"
-        "Subgroup field overlap</span><br>"
+        "<span style='font-family:Arial,sans-serif; font-weight:bold;'>◧◨</span> Subgroup field overlap</span><br>"
         f"<span style='font-size:{overlap_fs}px;'>"
         f"{overlap_summary_text}</span><br>"
         f"<br><span style='font-size:{parameter_mapping_fs}px;'>"
