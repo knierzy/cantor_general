@@ -262,7 +262,7 @@ def rgba_with_alpha(color, alpha):
     raise ValueError(f"Unsupported color format: {color}")
 
 
-def add_subgroup_fields(fig, subgroup_results, hull_width=1.0, subfield_width=1.0, color_map=None):
+def add_subgroup_fields(fig, subgroup_results, hull_width=1.0, subfield_width=1.0, color_map=None, fill_opacity=0.28):
     """
     Draw subgroup fields as translucent colored rectangles with matching colored outlines.
 
@@ -282,8 +282,10 @@ def add_subgroup_fields(fig, subgroup_results, hull_width=1.0, subfield_width=1.
         # visible; the rectangle boundary uses the SAME color with higher
         # opacity, making it appear slightly more intense without adding
         # any black/dark contour.
-        fill = rgba_with_alpha(color, 0.28)
-        subfield_line_color = rgba_with_alpha(color, 0.95)
+        fill = rgba_with_alpha(color, fill_opacity)
+        # Preserve visible boundaries while softening them with the fill.
+        boundary_opacity = 0.35 + (fill_opacity - 0.05) / 0.90 * 0.60
+        subfield_line_color = rgba_with_alpha(color, boundary_opacity)
 
         # The outer convex hull is a solid black line.
         hull_line_color = "black"
@@ -1550,6 +1552,19 @@ with pc4:
         )
     )
 
+subgroup_transparency = st.slider(
+    "Subgroup transparency (%)",
+    min_value=0,
+    max_value=95,
+    value=72,
+    step=5,
+    help=(
+        "Higher values make the colored subgroup fields and their boundaries "
+        "less intense. Black convex-hull outlines remain unchanged."
+    )
+)
+subgroup_fill_opacity = 1.0 - subgroup_transparency / 100.0
+
 colorbar_mode = st.selectbox(
     "Distance colorbar distribution",
     ["Linear", "Adaptive (focus on clustered distances)"],
@@ -2079,7 +2094,8 @@ if show_subgroups and generated_subgroups:
         nonempty_subgroups,
         hull_width=subgroup_hull_width,
         subfield_width=subgroup_subfield_width,
-        color_map=active_subgroup_color_map
+        color_map=active_subgroup_color_map,
+        fill_opacity=subgroup_fill_opacity
     )
 
     if show_subgroup_labels and not has_samples:
