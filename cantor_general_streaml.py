@@ -1172,7 +1172,7 @@ st.header("2. Define subgroup fields")
 
 definition_mode = st.radio(
     "Subgroup definition mode",
-    ["Manual input", "Upload Excel file"],
+    ["Manual input", "Upload Excel file (ranges)", "Upload Excel file (raw data)"],
     index=1,
     horizontal=True
 )
@@ -1245,7 +1245,7 @@ if definition_mode == "Manual input":
                 "ranges": ranges
             })
 
-else:
+elif definition_mode == "Upload Excel file (ranges)":
     st.markdown("""
 Upload an Excel file containing one subgroup per row.
 
@@ -1372,6 +1372,66 @@ The letters A–D refer to the parameter names defined above.
 
         except Exception as exc:
             st.error(f"Could not read subgroup definition file: {exc}")
+
+# Raw observations -> automatically derived subgroup range definitions.
+if definition_mode == "Upload Excel file (raw data)":
+    st.markdown(
+        "Upload an Excel workbook with columns **Subgroup, A, B, C, D** "
+        "(one observation per row). Raw values are normalized to 100% using "
+        "the Largest Remainder Method before deriving subgroup ranges."
+    )
+    raw_file = st.file_uploader(
+        "Upload subgroup raw data (.xlsx)", type=["xlsx"],
+        key="subgroup_raw_definition_uploader"
+    )
+    if raw_file is not None:
+        try:
+            raw_df = pd.read_excel(raw_file)
+            raw_df.columns = [str(c).replace("\u00a0", " ").strip() for c in raw_df.columns]
+            aliases = {str(c).casefold(): c for c in raw_df.columns}
+            required = ["Subgroup", "A", "B", "C", "D"]
+            missing = [c for c in required if c.casefold() not in aliases]
+            if missing:
+                raise ValueError("Missing required columns: " + ", ".join(missing))
+            raw_df = raw_df.rename(columns={aliases[c.casefold()]: c for c in required})
+            raw_df = raw_df[required].copy()
+            raw_df = raw_df.dropna(how="all")
+            raw_df["Subgroup"] = raw_df["Subgroup"].astype("string").str.strip()
+            if raw_df["Subgroup"].isna().any() or (raw_df["Subgroup"] == "").any():
+                raise ValueError("Every observation must have a Subgroup name.")
+            for col in ["A", "B", "C", "D"]:
+                raw_df[col] = pd.to_numeric(raw_df[col], errors="coerce")
+            values = raw_df[["A", "B", "C", "D"]].to_numpy(dtype=float)
+            if not np.isfinite(values).all() or (values < 0).any() or (values.sum(axis=1) <= 0).any():
+                raise ValueError("All A–D values must be finite and non-negative, with a positive row sum.")
+            if raw_df.empty:
+                raise ValueError("The workbook contains no observations.")
+            normalized = np.vstack([normalize_to_100_lrm(row) for row in values])
+            raw_df[["A", "B", "C", "D"]] = normalized
+            preview_rows = []
+            for name, group in raw_df.groupby("Subgroup", sort=False):
+                ranges = [(int(group[c].min()), int(group[c].max())) for c in ["A", "B", "C", "D"]]
+                subgroup_defs.append({"name": str(name), "ranges": ranges})
+                preview_rows.append({
+                    "Subgroup": str(name), "Samples": len(group),
+                    **{f"{c}_{side}": ranges[i][j]
+                       for i, c in enumerate(["A", "B", "C", "D"])
+                       for j, side in enumerate(["min", "max"])}
+                })
+            st.success(f"{len(subgroup_defs)} subgroup(s) derived from {len(raw_df)} observations.")
+            st.dataframe(pd.DataFrame(preview_rows), use_container_width=True)
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                pd.DataFrame(preview_rows).drop(columns="Samples").to_excel(writer, index=False, sheet_name="Ranges")
+                raw_df.to_excel(writer, index=False, sheet_name="Normalized_raw_data")
+            st.download_button("Download derived ranges (.xlsx)", data=output.getvalue(),
+                               file_name="cantor_derived_ranges.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.caption("Subgroup fields use the full integer range combinations, not only measured points. "
+                       "To show observations as points, upload them separately under Optional sample points.")
+        except Exception as exc:
+            subgroup_defs = []
+            st.error(f"Could not process subgroup raw data: {exc}")
 
 # ============================================================
 # 3. Generate subgroup fields automatically
